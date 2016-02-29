@@ -1,0 +1,1 @@
+cl /DUSRDLL /DWINDLL main.c /LD /FeTrigDebugger.dll /link && cl inject.c /Feinjector
