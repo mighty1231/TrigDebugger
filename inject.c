@@ -2,13 +2,17 @@
 #include <string.h>
 #include <assert.h>
 #include <windows.h>
+#include <psapi.h>
 
 #ifdef _MSC_VER
 #pragma comment(lib, "Advapi32")
 #pragma comment(lib, "User32")
+#pragma comment(lib, "Psapi")
 #endif
 
-int CALLBACK WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow ){
+HMODULE getModule ( HANDLE, char * );
+
+int main( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow ){
 	{
 		void *tokenHandle;
 		OpenProcessToken( GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &tokenHandle );
@@ -28,6 +32,7 @@ int CALLBACK WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
 		GetWindowThreadProcessId( hWnd, &processID );
 	}
 
+	HMODULE module;
 	HANDLE process = OpenProcess( PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, processID );
 		#define INSUFFICIENT_PERMISSIONS process != NULL
 		assert( INSUFFICIENT_PERMISSIONS );
@@ -41,7 +46,15 @@ int CALLBACK WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
 
 		assert( WriteProcessMemory( process, ptr, fullPath, MAX_PATH, NULL ) );
 
-		HANDLE thread = CreateRemoteThread( process, NULL, 0, ( LPTHREAD_START_ROUTINE )LoadLibrary, ptr, 0, NULL );
+		HANDLE thread;
+		module = getModule(process, fullPath);
+		if( module ) 
+			// eject
+			thread = CreateRemoteThread( process, NULL, 0, ( LPTHREAD_START_ROUTINE )FreeLibrary, module, 0, NULL );
+		else
+			// inject
+			thread = CreateRemoteThread( process, NULL, 0, ( LPTHREAD_START_ROUTINE )LoadLibrary, ptr, 0, NULL );
+
 		assert( thread != NULL );
 		WaitForSingleObject( thread, INFINITE );
 		DWORD ret;
@@ -55,7 +68,32 @@ int CALLBACK WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
 
 	assert( CloseHandle( process ) );
 
-	MessageBox( NULL, "Successfully injected TrigDebugger.dll.", "Success", MB_OK );
+	MessageBox( NULL, module ? "Successfully ejected TrigDebugger.dll."
+		                     : "Successfully injected TrigDebugger.dll.", "Success", MB_OK );
 
+	return 0;
+}
+
+// Captured from MSDN example, "Enumerating All Modules For a Process"
+// https://msdn.microsoft.com/en-us/library/windows/desktop/ms682621(v=vs.85).aspx
+HMODULE getModule ( HANDLE hProcess, char *chModName ) {
+	HMODULE hMods[1024];
+	DWORD cbNeeded;
+	int i;
+
+	// Get a list of all the modules in this process.
+	if (EnumProcessModules( hProcess, hMods, sizeof(hMods), &cbNeeded )) {
+		char szModName[MAX_PATH];
+		for (i = 0; i < (cbNeeded / sizeof(HMODULE)); i++) {
+
+			// Get the full path to the module's file.
+			if ( GetModuleFileNameEx( hProcess, hMods[i], szModName, sizeof(szModName) ) )
+			{
+				// Print the module name and handle value.
+				if (!strcmp(szModName, chModName))
+					return hMods[i];
+			}
+		}
+	}
 	return 0;
 }
