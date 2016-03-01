@@ -8,6 +8,8 @@
 #pragma comment(lib, "User32")
 #endif
 
+#define TRIGDEBUGGER_DLL "TrigDebugger.dll"
+
 int CALLBACK WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow ){
 	{
 		void *tokenHandle;
@@ -34,7 +36,7 @@ int CALLBACK WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
 
 	{
 		char fullPath[ MAX_PATH ];
-		assert( GetFullPathName( "TrigDebugger.dll", MAX_PATH, fullPath, NULL ) );
+		assert( GetFullPathName( TRIGDEBUGGER_DLL, MAX_PATH, fullPath, NULL ) );
 
 		void *ptr = VirtualAllocEx( process, NULL, MAX_PATH, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE );
 		assert( ptr != NULL );
@@ -55,7 +57,7 @@ int CALLBACK WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
 
 	assert( CloseHandle( process ) );
 
-	MessageBox( NULL, "Successfully injected TrigDebugger.dll.", "Success", MB_OK );
+	MessageBox( NULL, "Successfully injected "TRIGDEBUGGER_DLL, "Success", MB_OK );
 
 	return 0;
 }
