@@ -1,0 +1,127 @@
+00515A98 TRGCND_Array 함수들의 특징
+ecx (= cond)만 쓰며, 이전 eax를 쓰지 않는다.
+esi, edi, ebx 보존
+
+42c680 Always()
+42c720 CountdownTimer(Comparison, Time)
+	eax <- cond.bComparisonType
+	edx <- cond.dwCount
+	시간 : (*(DWORD *)0x58D6F4)
+42cc20 Command(Player, Comparison, Number, Unit)
+	call CommandAt(0x45F7A0) {
+		if (*(char *)0x685180 & 1) {
+			// memcpy(char *desti, char *source, size_t num)
+			memcpy(0x68A708, 0x581DE4, 336);  // allunitCounts <- unitsProducedOwnedTotal
+			memcpy(0x685188, 0x584DE4, 2736); // completedUnitCountsAtLocation <- completedUnitCount
+			memcpy(0x687C48, 0x582324, 2736); // allUnitCountsAtLocation <- allUnitCount
+			*(char *)0x685180 = 1;
+		}
+	}
+	esi <- cond
+	// dl <- cond.bComparisonType 에 따라 arg.1 값이 달라지는데 무슨 역할인지 모르겠다.
+	ecx <- cond.dwGroup
+	dx <- cond.wUnitType
+	call Command(0x4606B0) : (groupID)ecx 의 (unitId)dx 갯수를 eax로 리턴, arg.1 사용 ??
+	ecx <- cond.bComparisonType
+	edx <- dwCount
+	이후 분기.
+	유닛 수 : Command 실행 이후 eax 값
+42cd70 Bring(Player, Comparison, Number, Unit, Location)
+	esi <- cond
+	dl <- cond.dwLocation
+	if (dl != 0) {
+		dl -= 1 // Bring에 dl을 쓰는 증거
+		call Bring(0x4609D0) {
+			if (*(char *)0x685180 == 2 || *(char *)0x68AC48 != dl) {
+				// 4609EE ???
+				*(char *)0x685180 = 2
+				// ???
+			}
+		}
+		dl <- cond.bComparisonType
+		ecx <- cond.dwGroup
+		eax = (dl != 1)
+		push eax
+		eax <- call Command
+		ecx <- cond.bComparisonType
+		edx <- cond.dwCount
+		if (ecx == 0) {         // AtLeast
+			return (eax >= edx)   // unsigned
+		} if (ecx == 1) {       // AtMost
+			return (edx >= eax)   // unsigned
+		} if (ecx == 10) {      // Exactly
+			return (eax == ecx)
+		} else {
+			return 0
+		}
+	} 
+	return 0;
+	유닛 수 : Command 실행 이후 eax 값
+42cbe0 Accumulate(Player, Comparison, Number, ResourceType)
+	dx <- cond.bExtraType
+	ecx <- cond.dwGroup
+	push 0
+	call Accumulate
+	ecx <- bComparisonType
+	if (ecx == 0) {         // AtLeast
+		return (eax >= edx)   // unsigned
+	} if (ecx == 1) {       // AtMost
+		return (edx >= eax)   // unsigned
+	} if (ecx == 10) {      // Exactly
+		return (eax == ecx)
+	} else {
+		return 0
+	}
+	돈 값 : Command 실행 이후 eax 값
+42cba0 Kills(Player, Comparison, Number, Unit)
+	킬 수 : Kill 실행 이후 eax 값
+42ca70 CommandMost(Unit)
+	maxval = 0 // ebx
+	while(player = getNextActivePlayer) {
+		eax <- player's command count
+		if (player == currentTrigPlayerId)
+			mov [ebp+8], eax
+		if (eax > maxval)
+			maxval <- eax
+	}
+	return [ebp+8] >= maxval // (unsigned)
+	유닛 수 : loop 끝난 이후 [ebp+8]
+	유닛 기준값 : loop 끝난 이후 ebx(최댓값)
+42ccf0 CommandMostAt(Unit, Location)
+	if (Location == 0)
+		return 0
+	CommandMost와 비슷한 loop
+	return [ebp+8] >= maxval // (unsigned)
+	유닛 수 : loop 끝난 이후 [ebp+8]
+	유닛 기준값 : loop 끝난 이후 ebx(최댓값)
+42c990 MostKills(Unit)
+	CommandMost와 비슷한 loop
+	킬 수 : loop 끝난 이후 [ebp+8]
+	킬 기준값 : loop 끝난 이후 ebx(최댓값)
+42c8b0 HighestScore(ScoreType)
+	CommandMost와 비슷한 loop
+	점수 : loop 끝난 이후 [ebp+8]
+	점수 기준값 : loop 끝난 이후 ebx(최댓값)
+42c7d0 MostResources(ResourceType)
+	CommandMost와 비슷한 loop
+	자원 : loop 끝난 이후 [ebp+8]
+	자원 기준값 : loop 끝난 이후 ebx(최댓값)
+42c610 Switch(Switch, State)
+	스위치 상태: 두부분의 and eax, esi 실행 이후의 eax값
+42c6e0 ElapsedTime(Comparison : cond.bComparisonType, Time : cond.dwCount)
+	시간 값: *(DWORD *)0x58D6F8
+42c670 Briefing()
+	return 0
+42cb20 Opponents(Player, Comparison, Number)
+	적 수 : Opponents 실행직후의 al 혹은 좀 뒤의 edx
+42cb60 Deaths(Player, Comparison, Number, Unit)
+	데스 값 : Deaths 실행 직후의 eax
+	오프셋값(EUD일때만?) : Deaths subroutine속에 숨겨져있다.
+42ca00 CommandLeast(Unit)
+42cc70 CommandLeastAt(Unit, Location)
+42c920 LeastKills(Unit)
+42c840 LowestScore(ScoreType)
+42c760 LeastResources(ResourceType)
+42cae0 Score(Player, ScoreType, Comparison, Number)
+42c680 Always()
+42c670 Never()

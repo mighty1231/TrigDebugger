@@ -1,0 +1,165 @@
+0051A280 struct triggerVector{dw _; Trigger* prev; Trigger* next;}[8]
+
+00512800 void * TRGACT_Array[60]
+00515A98 void * TRGCND_Array[24]  // TRGCND_Array[0] never executed.
+
+typedef struct _Condition {
+	/*  0 = 00h */  DWORD dwLocation;
+	/*  4 = 04h */  DWORD dwGroup;
+	/*  8 = 08h */  DWORD dwCount;
+	/* 12 = 0Ch */  WORD  wUnitType;
+	/* 14 = 0Eh */  BYTE  bComparisonType;
+	/* 15 = 0Fh */  BYTE  bConditionType;
+	/* 16 = 10h */  BYTE  bExtraType;
+	/* 17 = 11h */  BYTE  bFlags;
+	/* 18 = 12h */  BYTE  __bAlign[2];
+} Condition;
+
+typedef struct _Action {
+	/*  0 = 00h */  DWORD dwSourceLocation;
+	/*  4 = 04h */  DWORD dwTextString;
+	/*  8 = 08h */  DWORD dwWavString;
+	/* 12 = 0Ch */  DWORD dwTime;
+	/* 16 = 10h */  DWORD dwSourceGroup;
+	/* 20 = 14h */  DWORD dwExtra;
+	/* 24 = 18h */  WORD  wType;
+	/* 26 = 1Ah */  BYTE  bActionType;
+	/* 27 = 1Bh */  BYTE  bModifier;
+	/* 28 = 1Ch */  BYTE  bFlags;
+	/* 29 = 1Dh */  BYTE  __bAlign[3];
+} Action;
+
+typedef struct _Trigger {
+	/*    0 = 000h */  Trigger   *prev;
+	/*    4 = 004h */  Trigger   *next;
+	/*    8 = 008h */  Condition conditions[16];   // 20byte
+	/*  328 = 148h */  Action    actions[64];      // 32byte
+	/* 2376 = 948h */  DWORD     dwExecutionFlags;
+	/* 2380 = 94Ch */  BYTE      bExecuteFor[27];
+	/* 2407 = 967h */  BYTE      bCurrentActionIndex;
+} Trigger;
+
+00489200 ExecuteTriggerConditions(eax <- Trigger *trig) 
+/*
+	use retn with eax <- return_value.
+	registers able to use = ecx, edx (from TRGCND_Array[1])
+	esi, edi must be preserved
+*/
+	esi = &(trig->conditions[0].conditionType);
+
+	for (int edi = 0; edi < 16; edi++, esi+=20 /* 48922D */) {
+		// 489210
+		if (!(* ((char *)esi + 2)) & 2) {
+			if (*(char *)esi != 0) { // if conditionType != 0
+				eax = *(char *) esi;
+				ecx = esi - 15; // same with &(trig->conditions[edi])
+				if (TRGCND_Array[eax]() == 0) {
+					// 48923E
+					return 0;
+				}
+			}
+			else
+				break;
+		}
+	}
+	// 489236
+	return 1;
+
+004894C0 AddGameTrigger
+00489450 executeGameTrigger(triggerVector *trig)
+	eax = trig->next; // Caution: triggerVector has different structure with Trigger.
+	if (trig->next >= 0){
+		Trigger *trigger = esi;
+
+		while ((unsigned int) trigger >= 0){
+			if (!(trigger->flag & 8)) {
+				(Trigger *)0x6509AC = trigger; // currentTriggerNode
+				if (!(trigger->flag & 1)) {
+					if (ExecuteTriggerConditions(trigger)){
+						trigger->bCurrentActionIndex = 0;
+						ExecuteTriggerActions();
+					}
+				} else
+					ExecuteTriggerActions();
+			}
+			trigger = trigger->next;
+		}
+	}
+
+0048A460 executeAllGameTriggers
+	/* variables
+	 * int trgCheck : 0x6509A0
+	 * int trigPlayerFlags[8] : 0x650974
+	 */
+	if (!gamePause){
+		// 0x48A479
+		load_endmission(); // 48A415
+		edx = [ebp+8];
+		{
+			// 489CC0 countdownTimerExecute()
+			/* variables
+			 * char isExecutingWait[8] : 0x6509B8
+			 * unsigned int trgWait[8] : 0x650980
+			 * int gamePaused : 0x6509C4
+			 * short leaderboardTimer : 0x65097C
+			 * short countdownTimerCounter : 0x6509C0
+			 * int countdownTimer : 0x58D6F4
+			 * int timerPauseState : 0x58F04C
+			 */
+
+			int player = 0; // eax
+			while (player < 8) {
+				if (isExecutingWait[player] != 0 && trgWait[player] != -1) {
+				    if (trgWait[player] <= edx) { // unsigned
+				    	trgWait[player] -= edx;
+				    } else {
+				    	isExecutingWait[player] = 0;
+				    	trgWait[player] = 0;
+				    	trgCheck = 1; // 하나라도 트리거 돌아갈 타이밍이면 1
+				    }
+			    }
+				player++;
+			}
+			if (!gamePaused) {
+				if (leaderboardTimer-- == 0) {
+					leaderboardTimer = 15;
+					updateLeaderboardSorting(); // 4538B0
+				}
+
+				if (countdownTimerCounter-- == 0) {
+					elapsedTimeSeconds++;
+					if (countdownTimer != 0) {
+						if (timerPauseState == 0 && countdownTimer-- == 0) {
+							trgCheck = 1;
+						}
+						UpdateCountdownTimer(); // 489C30
+						countdownTimerCounter = 15;
+					} else {
+						// 489D89
+						DisableCountdownTimer(); // 4E5600
+						countdownTimerCounter = 15;
+					}
+				}
+			}
+
+		}
+
+		if (trgCheck--) {
+			memset(&trigPlayerFlags, 0, 8);
+			trgCheck = 30;
+			(char *) 0x685180 = 0;
+			
+			int executedOnce = 0; // esi
+
+			while (((int *)0x6509B0 = eax = getNextActivePlayer()) < 8) {
+				Trigger *ecx = triggerVector[eax].next;
+				if (ecx != NULL) {
+					executeGameTrigger(&triggerVector[eax]);
+					executedOnce = 1;
+				}
+			}
+			if (executedOnce != 0)
+				endgameCheck();
+		}
+	}
+	return 4;
